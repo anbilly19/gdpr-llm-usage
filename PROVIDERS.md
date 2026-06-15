@@ -1,6 +1,6 @@
 # Provider Reference Card
 
-Deep-dive reference for all four EU-compliant LLM providers covered in this project.
+Deep-dive reference for all five EU-compliant LLM providers covered in this project.
 Use this alongside the standalone scripts in `providers/` and the `.env.example` file.
 
 ---
@@ -249,17 +249,107 @@ export AWS_PROFILE=your-profile
 
 ---
 
+## 5. Self-hosted (vLLM / Ollama / LocalAI) — HOME
+
+> **Status:** Self-managed, zero data egress
+
+### When to use
+
+- **Strictest data control:** prompts never leave your own infrastructure. No external sub-processor, no data transfer under GDPR Article 46.
+- **Bulk / batch workloads:** reserved GPU compute is significantly cheaper than per-token API pricing at scale.
+- **Sensitive data tiers:** workloads where even a cloud-provider DPA is insufficient (e.g., medical records, legal discovery).
+- **Dev / test:** a local Ollama instance costs nothing beyond hardware already in use.
+- **Model diversity:** run any open-weight model (Qwen3, Llama-4, Mistral, Phi-4, Gemma-3) without waiting for hyperscaler availability.
+
+### Compatible servers
+
+| Server | Best for | Notes |
+|--------|----------|-------|
+| [vLLM](https://docs.vllm.ai/) | Production, high throughput | Continuous batching, tensor parallelism, OpenAI-compatible API |
+| [Ollama](https://ollama.com/) | Local dev, easy setup | One-command model download and serve |
+| [LocalAI](https://localai.io/) | Edge / CPU inference | Supports GGUF, runs without GPU |
+| Any OpenAI-compatible proxy | Bring-your-own gateway | LiteLLM, ArchGW, etc. |
+
+### Key env vars
+
+```bash
+SELF_HOSTED_BASE_URL=http://localhost:8000/v1   # vLLM default; Ollama uses :11434/v1
+SELF_HOSTED_API_KEY=local-dev-key               # any value for local vLLM
+SELF_HOSTED_MODEL=qwen3-32b                     # must match --served-model-name in vLLM
+```
+
+### Starting vLLM
+
+```bash
+# Basic (single GPU)
+vllm serve Qwen/Qwen3-32B \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name qwen3-32b
+
+# With 4-bit quantisation (fits 70B on A100 80GB)
+vllm serve Qwen/Qwen3-72B \
+  --quantization awq \
+  --served-model-name qwen3-72b
+
+# Multi-GPU tensor parallelism
+vllm serve Qwen/Qwen3-32B \
+  --tensor-parallel-size 2 \
+  --served-model-name qwen3-32b
+```
+
+### Starting Ollama (local dev)
+
+```bash
+ollama serve                   # starts on http://localhost:11434
+ollama pull qwen3:32b          # download model once
+# Set SELF_HOSTED_BASE_URL=http://localhost:11434/v1
+# Set SELF_HOSTED_MODEL=qwen3:32b
+```
+
+### Recommended open models (Apache 2.0 / MIT, June 2026)
+
+| Model | HF repo | Size | VRAM (fp16) | Notes |
+|-------|---------|------|-------------|-------|
+| Qwen3-32B | `Qwen/Qwen3-32B` | 32B | ~64 GB | Best overall; fits 1× A100 80GB |
+| Mistral-Small-3.2 | `mistralai/Mistral-Small-3.2-24B-Instruct` | 24B | ~48 GB | Fast instruction following |
+| Llama-4-Scout | `meta-llama/Llama-4-Scout-17B-16E-Instruct` | 17B active (MoE) | ~34 GB active | Low VRAM/token |
+| Phi-4 | `microsoft/Phi-4` | 14B | ~28 GB | Strong code + structured output |
+| Gemma-3-27B | `google/gemma-3-27b-it` | 27B | ~54 GB | Multilingual, instruction tuned |
+
+### Azure compute sizing (EU region: `germanywestcentral`)
+
+| VM SKU | GPU | VRAM | On-demand | Reserved 1yr | Use case |
+|--------|-----|------|-----------|--------------|----------|
+| NC24ads A100 v4 | 1× A100 80 GB | 80 GB | ~€3.10/hr | ~€1.20/hr | 32B fp16, 70B 4-bit |
+| NC48ads A100 v4 | 2× A100 80 GB | 160 GB | ~€6.20/hr | ~€2.40/hr | 70B fp16, 100B+ 4-bit |
+| NC96ads A100 v4 | 4× A100 80 GB | 320 GB | ~€12.40/hr | ~€4.80/hr | Large models / high throughput |
+
+> Spot instances typically 60–70% cheaper — use with a job queue for batch workloads.
+
+### Documentation
+
+- [vLLM docs](https://docs.vllm.ai/)
+- [vLLM OpenAI-compatible server](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html)
+- [Ollama docs](https://ollama.com/docs)
+- [LocalAI docs](https://localai.io/)
+- [Qwen3-32B on HuggingFace](https://huggingface.co/Qwen/Qwen3-32B)
+- [OpenAI-compatible API spec](https://platform.openai.com/docs/api-reference/chat)
+- [Azure NC A100 v4 pricing](https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)
+
+---
+
 ## Cross-Provider Comparison
 
-| Dimension | Azure OpenAI | Vertex Gemini | Vertex Claude | Bedrock Claude |
-|-----------|-------------|---------------|---------------|----------------|
-| Cloud | Azure | GCP | GCP | AWS |
-| Models | GPT-4o, o3, o4-mini | Gemini 2.5 Flash/Pro | Claude Sonnet/Opus | Claude Sonnet/Opus |
-| EU Data Residency | ✅ Full (EU Data Boundary) | ✅ Full (EU multi-region) | ✅ Full (EU multi-region, preview) | ✅ Full (eu-central-1 etc.) |
-| GDPR DPA available | ✅ Microsoft DPA | ✅ Google DPA | ✅ Google DPA | ✅ AWS DPA |
-| Auth mechanism | API key / Azure AD | Service account / ADC | Service account / ADC | IAM / Access keys |
-| Streaming | ✅ (`stream=True`) | ✅ (`stream=True`) | ✅ (`messages.stream()`) | ✅ (`messages.stream()`) |
-| Token usage in stream | ✅ (`stream_options`) | ✅ (`usage_metadata`) | ✅ (final message) | ✅ (final message) |
-| SDK | `openai` | `google-genai` | `anthropic[vertex]` | `anthropic[bedrock]` |
-| Home/Away | HOME | AWAY | AWAY | AWAY |
-| Extra cloud dependency | None | GCP project | GCP project | AWS account |
+| Dimension | Azure OpenAI | Vertex Gemini | Vertex Claude | Bedrock Claude | Self-hosted |
+|-----------|-------------|---------------|---------------|----------------|-------------|
+| Cloud | Azure | GCP | GCP | AWS | Your infra |
+| Models | GPT-4o, o3, o4-mini | Gemini 2.5 Flash/Pro | Claude Sonnet/Opus | Claude Sonnet/Opus | Any open model |
+| EU Data Residency | ✅ Full (EU Data Boundary) | ✅ Full (EU multi-region) | ✅ Full (EU multi-region, preview) | ✅ Full (eu-central-1 etc.) | ✅ Full (zero egress) |
+| GDPR DPA available | ✅ Microsoft DPA | ✅ Google DPA | ✅ Google DPA | ✅ AWS DPA | N/A — no sub-processor |
+| Auth mechanism | API key / Azure AD | Service account / ADC | Service account / ADC | IAM / Access keys | None / custom |
+| Streaming | ✅ (`stream=True`) | ✅ (`stream=True`) | ✅ (`messages.stream()`) | ✅ (`messages.stream()`) | ✅ (`stream=True`) |
+| Token usage in stream | ✅ (`stream_options`) | ✅ (`usage_metadata`) | ✅ (final message) | ✅ (final message) | ✅ (`stream_options`) |
+| SDK | `openai` | `google-genai` | `anthropic[vertex]` | `anthropic[bedrock]` | `openai` (compat.) |
+| Home/Away | HOME | AWAY | AWAY | AWAY | HOME |
+| Extra cloud dependency | None | GCP project | GCP project | AWS account | None |
+| Cost model | Per token | Per token | Per token | Per token | Compute time |

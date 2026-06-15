@@ -17,6 +17,7 @@
   - [Vertex AI — Gemini (AWAY)](#2-google-vertex-ai--gemini-away)
   - [Vertex AI — Claude (AWAY)](#3-google-vertex-ai--claude-away)
   - [AWS Bedrock — Claude (AWAY)](#4-aws-bedrock--claude-away)
+  - [Self-hosted (HOME — full data control)](#5-self-hosted-vllm--ollama-home)
 - [LangGraph Router](#langgraph-router)
 - [Reusable Harness](#reusable-harness)
 - [Unified Token Dashboard](#unified-token-dashboard)
@@ -33,10 +34,10 @@ When your primary stack lives in **Azure** (EU region), you have two routing sit
 
 | Situation | Description |
 |-----------|-------------|
-| **HOME** | Azure-native models (Azure OpenAI GPT-4o). Full EU Data Boundary compliance. |
+| **HOME** | Azure-native models (Azure OpenAI GPT-4o) or self-hosted open-source models. Full EU Data Boundary or zero egress. |
 | **AWAY** | Cross-cloud to Google Vertex AI or AWS Bedrock for models not yet EU-native on Azure (e.g. Anthropic Claude via Azure Foundry is roadmap, not yet available in EU as of 2026). |
 
-This project shows exactly how to wire up all four options with a unified interface so you can switch or combine providers without touching business logic.
+This project shows exactly how to wire up all five options with a unified interface so you can switch or combine providers without touching business logic.
 
 ---
 
@@ -52,19 +53,18 @@ This project shows exactly how to wire up all four options with a unified interf
                  │   LangGraph Router   │
                  │  (langgraph_router/) │
                  └──────────┬──────────┘
-          ┌─────────────────┼──────────────────┐
-          │                 │                  │
-  ┌───────▼──────┐  ┌───────▼──────┐  ┌───────▼──────────────┐
-  │  HOME        │  │  AWAY        │  │  AWAY                 │
-  │  Azure       │  │  Google      │  │  AWS Bedrock          │
-  │  OpenAI      │  │  Vertex AI   │  │  Claude               │
-  │  (EU region) │  │  Gemini/     │  │  (eu-central-1 etc.)  │
-  │              │  │  Claude      │  │                       │
-  │  EU Data     │  │  (EU multi-  │  │  Frankfurt / Dublin   │
-  │  Boundary ✓  │  │  region) ✓   │  │  / Stockholm ✓        │
-  └──────────────┘  └──────────────┘  └───────────────────────┘
-          │                 │                  │
-          └─────────────────▼──────────────────┘
+     ┌───────────┬─────────┼──────────────┬────────────┐
+     │           │         │              │            │
+ ┌───▼────┐ ┌───▼────┐ ┌───▼────┐ ┌─────▼────┐ ┌───▼───────┐
+ │HOME        │ │AWAY        │ │AWAY        │ │AWAY        │ │HOME        │
+ │Azure       │ │Google      │ │Google      │ │AWS Bedrock │ │Self-hosted │
+ │OpenAI      │ │Vertex      │ │Vertex      │ │Claude      │ │vLLM/Ollama │
+ │GPT-4o      │ │Gemini      │ │Claude      │ │EU regions  │ │your infra  │
+ │EU Data     │ │EU multi-   │ │EU multi-   │ │✓           │ │zero egress │
+ │Boundary ✓  │ │region ✓    │ │region ✓    │ │            │ │✓           │
+ └────────────┘ └────────────┘ └────────────┘ └────────────┘ └─────────────┘
+     │           │         │              │            │
+     └───────────┴─────────┴──────────────┴────────────┘
                  ┌──────────────────────┐
                  │  Unified Token       │
                  │  Dashboard (Rich)    │
@@ -82,6 +82,7 @@ This project shows exactly how to wire up all four options with a unified interf
 | Google Vertex AI | Gemini 2.5 Flash | ✅ Full | GA | Use `GOOGLE_CLOUD_LOCATION=eu` or `europe-west4` |
 | Google Vertex AI | Claude Sonnet | ✅ Full | Preview | EU multi-region endpoint; data stays within EU |
 | AWS Bedrock | Claude Sonnet | ✅ Full | GA | Use `eu-central-1` (Frankfurt) or `eu-west-1` (Dublin) |
+| Self-hosted (vLLM/Ollama) | Any open model | ✅ Full | Self-managed | Zero egress — prompts never leave your infra |
 
 ---
 
@@ -121,6 +122,10 @@ uv run python providers/vertex_claude_provider.py
 
 # AWS Bedrock Claude (AWAY — EU)
 uv run python providers/bedrock_claude_provider.py
+
+# Self-hosted vLLM / Ollama (HOME — zero egress)
+# Start your server first: vllm serve Qwen/Qwen3-32B --host 0.0.0.0 --port 8000
+uv run python providers/self_hosted_vllm_provider.py
 ```
 
 ### Run all providers via LangGraph router
@@ -131,12 +136,13 @@ uv run python run_all.py
 
 # Single provider
 uv run python run_all.py --provider vertex_gemini
+uv run python run_all.py --provider self_hosted
 
 # Custom prompt
 uv run python run_all.py --prompt "Summarise GDPR Article 28 processor obligations."
 
 # Via environment variable (useful in CI)
-PROVIDER=bedrock_claude uv run python langgraph_router/router.py
+PROVIDER=self_hosted uv run python langgraph_router/router.py
 ```
 
 ### Embed in your own codebase via the harness
@@ -144,7 +150,8 @@ PROVIDER=bedrock_claude uv run python langgraph_router/router.py
 ```python
 from langgraph_router.harness import LLMHarness
 
-harness = LLMHarness(provider="vertex_gemini")  # or 'azure', 'vertex_claude', 'bedrock_claude', 'all'
+# Any of: 'azure', 'vertex_gemini', 'vertex_claude', 'bedrock_claude', 'self_hosted', 'all'
+harness = LLMHarness(provider="self_hosted")
 result = harness.run("Your prompt here")
 print(result.response_text)
 print(result.usage)  # {prompt_tokens, completion_tokens, total_tokens}
@@ -156,23 +163,24 @@ print(result.usage)  # {prompt_tokens, completion_tokens, total_tokens}
 
 ```
 gdpr-llm-usage/
-├── providers/                        # Standalone provider scripts (one per LLM backend)
-│   ├── azure_openai_provider.py      # HOME: Azure OpenAI GPT-4o, EU Data Boundary
-│   ├── vertex_gemini_provider.py     # AWAY: Vertex AI Gemini, EU multi-region (google-genai SDK)
-│   ├── vertex_claude_provider.py     # AWAY: Vertex AI Claude, EU multi-region
-│   └── bedrock_claude_provider.py    # AWAY: AWS Bedrock Claude, EU regions
+├── providers/                              # Standalone provider scripts (one per LLM backend)
+│   ├── azure_openai_provider.py            # HOME: Azure OpenAI GPT-4o, EU Data Boundary
+│   ├── vertex_gemini_provider.py           # AWAY: Vertex AI Gemini, EU multi-region (google-genai SDK)
+│   ├── vertex_claude_provider.py           # AWAY: Vertex AI Claude, EU multi-region
+│   ├── bedrock_claude_provider.py          # AWAY: AWS Bedrock Claude, EU regions
+│   └── self_hosted_vllm_provider.py        # HOME: vLLM / Ollama / LocalAI, zero data egress
 ├── langgraph_router/
-│   ├── router.py                     # LangGraph graph: fan-out routing across providers
-│   └── harness.py                    # Drop-in harness class for integrating into any codebase
+│   ├── router.py                           # LangGraph graph: fan-out routing across all 5 providers
+│   └── harness.py                          # Drop-in harness class for integrating into any codebase
 ├── token_dashboard/
-│   └── dashboard.py                  # Unified Rich token usage table (all providers)
+│   └── dashboard.py                        # Unified Rich token usage table (all providers)
 ├── tests/
-│   ├── test_providers.py             # Unit tests for provider modules (mocked)
-│   └── test_router.py                # Unit tests for LangGraph router (mocked)
-├── run_all.py                        # CLI: run one or all providers and show dashboard
-├── pyproject.toml                    # uv-managed dependencies
-├── .env.example                      # Credential template
-└── PROVIDERS.md                      # Deep-dive reference: regions, model IDs, pricing links
+│   ├── test_providers.py                   # Unit tests for provider modules (mocked)
+│   └── test_router.py                      # Unit tests for LangGraph router (mocked)
+├── run_all.py                              # CLI: run one or all providers and show dashboard
+├── pyproject.toml                          # uv-managed dependencies
+├── .env.example                            # Credential template
+└── PROVIDERS.md                            # Deep-dive reference: regions, model IDs, pricing links
 ```
 
 ---
@@ -212,11 +220,8 @@ VERTEX_GEMINI_MODEL=gemini-2.5-flash-001
 
 **Auth alternatives:**
 ```bash
-# Keyless (local dev)
-gcloud auth application-default login
-
-# Service account (CI/production)
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json
+gcloud auth application-default login            # local dev
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json  # CI/production
 ```
 
 Docs: [Vertex AI overview](https://cloud.google.com/vertex-ai/docs/start/introduction-unified-platform) · [Gemini on Vertex](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/overview) · [EU locations](https://cloud.google.com/vertex-ai/docs/general/locations#europe) · [google-genai SDK](https://googleapis.github.io/python-genai/)
@@ -255,13 +260,58 @@ BEDROCK_CLAUDE_MODEL=anthropic.claude-sonnet-4-5-20251001-v1:0
 
 > **Important:** You must manually enable Anthropic model access in the [AWS Console](https://console.aws.amazon.com/bedrock/home#/modelaccess) for each EU region you intend to use.
 
-Docs: [AWS Bedrock overview](https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html) · [Claude on Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic.html) · [Supported model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) · [anthropic[bedrock] SDK](https://github.com/anthropics/anthropic-sdk-python#aws-bedrock)
+Docs: [AWS Bedrock overview](https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html) · [Claude on Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic.html) · [anthropic[bedrock] SDK](https://github.com/anthropics/anthropic-sdk-python#aws-bedrock)
+
+---
+
+### 5. Self-hosted vLLM / Ollama (HOME)
+
+**Strongest data control option** — prompts never leave your own infrastructure. No external API dependency, no data sub-processor agreements needed. Ideal for bulk/batch workloads, strict data-classification tiers, and development environments.
+
+```bash
+# In .env:
+SELF_HOSTED_BASE_URL=http://localhost:8000/v1
+SELF_HOSTED_API_KEY=local-dev-key    # any value for vLLM; use real key if behind a proxy
+SELF_HOSTED_MODEL=qwen3-32b          # any model served by your endpoint
+```
+
+**Start vLLM (recommended for production):**
+```bash
+vllm serve Qwen/Qwen3-32B \
+  --host 0.0.0.0 --port 8000 \
+  --served-model-name qwen3-32b
+```
+
+**Or Ollama (easier for local dev):**
+```bash
+ollama serve                         # starts on http://localhost:11434
+# Set SELF_HOSTED_BASE_URL=http://localhost:11434/v1
+# Set SELF_HOSTED_MODEL=qwen3:32b
+```
+
+**Compatible open models (Apache 2.0 / MIT — commercial use OK):**
+
+| Model | Size | Best for |
+|-------|------|----------|
+| `Qwen/Qwen3-32B` | 32B | General reasoning, long context, code |
+| `mistralai/Mistral-Small-3.2-24B-Instruct` | 24B | Fast instruction following |
+| `meta-llama/Llama-4-Scout-17B-16E-Instruct` | 17B active (MoE) | Low VRAM per token |
+| `microsoft/Phi-4` | 14B | Code, structured output |
+| `google/gemma-3-27b-it` | 27B | Multilingual, instruction tuned |
+
+**On Azure (EU region) compute:**
+- `NC A100 v4` (1× A100 80 GB) in `germanywestcentral` — 32B fp16 fits in one GPU
+- On-demand: ~€2.80–3.20/hr · Reserved 1yr: ~€1.20/hr (~€870/month)
+- Use AWQ/GPTQ 4-bit quant to fit 70B+ models on a single A100
+- Spot instances (≈60–70% discount) + a job queue for batch workloads
+
+Docs: [vLLM docs](https://docs.vllm.ai/) · [Ollama docs](https://ollama.com/docs) · [OpenAI-compatible API spec](https://platform.openai.com/docs/api-reference/chat)
 
 ---
 
 ## LangGraph Router
 
-`langgraph_router/router.py` implements a **fan-out LangGraph graph** that can route a single prompt to one or all providers and collect unified token usage.
+`langgraph_router/router.py` implements a **fan-out LangGraph graph** that routes a single prompt to one or all five providers and collects unified token usage.
 
 ```
 [START]
@@ -270,7 +320,8 @@ Docs: [AWS Bedrock overview](https://docs.aws.amazon.com/bedrock/latest/userguid
    ├── azure          → node_azure
    ├── vertex_gemini  → node_vertex_gemini
    ├── vertex_claude  → node_vertex_claude
-   └── bedrock_claude → node_bedrock_claude
+   ├── bedrock_claude → node_bedrock_claude
+   └── self_hosted    → node_self_hosted
         │ (all converge via Annotated reducer)
      [END]
 ```
@@ -278,7 +329,7 @@ Docs: [AWS Bedrock overview](https://docs.aws.amazon.com/bedrock/latest/userguid
 Key design choices:
 - Each **provider node** is a thin wrapper — all LLM logic lives in the standalone provider modules
 - `usage_records` and `responses` use **LangGraph Annotated reducers** to safely accumulate across parallel branches
-- `PROVIDER=all` fans out to all four providers (LangGraph handles concurrency)
+- `PROVIDER=all` fans out to all five providers (LangGraph handles concurrency)
 
 Docs: [LangGraph concepts](https://langchain-ai.github.io/langgraph/concepts/) · [Conditional edges](https://langchain-ai.github.io/langgraph/how-tos/branching/) · [Parallel nodes](https://langchain-ai.github.io/langgraph/how-tos/map-reduce/)
 
@@ -291,13 +342,13 @@ Docs: [LangGraph concepts](https://langchain-ai.github.io/langgraph/concepts/) �
 ```python
 from langgraph_router.harness import LLMHarness, HarnessResult
 
-# Single provider
-harness = LLMHarness(provider="vertex_gemini")
+# Any single provider
+harness = LLMHarness(provider="self_hosted")  # or 'azure', 'vertex_gemini', 'vertex_claude', 'bedrock_claude'
 result: HarnessResult = harness.run("Your prompt")
 print(result.response_text)
 print(result.usage)   # dict: prompt_tokens, completion_tokens, total_tokens
 
-# All providers — returns list of HarnessResult
+# All five providers — returns list of HarnessResult
 harness = LLMHarness(provider="all")
 results = harness.run_all("Your prompt")
 for r in results:
@@ -323,8 +374,9 @@ After every run (standalone or via router), a Rich terminal table shows token us
 │ Vertex Gemini   │ gemini-2.5-flash-001      │   38  │    74    │ 112 │
 │ Vertex Claude   │ claude-sonnet-4-5@2025... │   41  │    96    │ 137 │
 │ Bedrock Claude  │ anthropic.claude-sonnet.. │   41  │    91    │ 132 │
+│ Self-hosted     │ qwen3-32b                 │   39  │    88    │ 127 │
 ├─────────────────┼───────────────────────────┼───────┼──────────┼─────┤
-│ TOTAL           │                           │  162  │   350    │ 512 │
+│ TOTAL           │                           │  201  │   438    │ 639 │
 ╰──────────────────────────────────────────────────────────────────────╯
   Most token-efficient: Vertex Gemini (112 total tokens)
 ```
@@ -344,6 +396,7 @@ uv run pytest -v
 
 # Single test file
 uv run pytest tests/test_providers.py -v
+uv run pytest tests/test_router.py -v
 ```
 
 ---
@@ -378,11 +431,12 @@ This section maps the broader ecosystem to help you understand where `gdpr-llm-u
 ### When to use what
 
 ```
-Need production-grade proxy with 100+ providers?  → LiteLLM
-Need Rust-native strongly-typed provider traits?   → EdgeQuake LLM
-Need AWS-anchored multi-provider routing (IaC)?   → AWS Multi-Provider Gateway guidance
+Need production-grade proxy with 100+ providers?     → LiteLLM
+Need Rust-native strongly-typed provider traits?      → EdgeQuake LLM
+Need AWS-anchored multi-provider routing (IaC)?      → AWS Multi-Provider Gateway guidance
+Need zero-egress, full data control, no sub-proc?    → self_hosted provider in this repo
 Need EU/GDPR-pinned routing with Azure as home,
-  LangGraph orchestration, and Python harness?    → this repo ✓
+  LangGraph orchestration, and Python harness?       → this repo ✓
 ```
 
 ---
@@ -402,6 +456,10 @@ Need EU/GDPR-pinned routing with Azure as home,
 | AWS Bedrock overview | https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html |
 | Claude on Bedrock | https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic.html |
 | Bedrock EU model access | https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html |
+| vLLM documentation | https://docs.vllm.ai/ |
+| vLLM OpenAI-compatible server | https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html |
+| Ollama documentation | https://ollama.com/docs |
+| Qwen3 model card | https://huggingface.co/Qwen/Qwen3-32B |
 | LangGraph concepts | https://langchain-ai.github.io/langgraph/concepts/ |
 | LangGraph how-to guides | https://langchain-ai.github.io/langgraph/how-tos/ |
 | uv documentation | https://docs.astral.sh/uv/ |

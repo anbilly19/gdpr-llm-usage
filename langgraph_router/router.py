@@ -3,35 +3,6 @@ LangGraph Provider Router
 ===============================================================================
 A provider-agnostic LangGraph graph that routes a chat request to one or more
 EU-compliant LLM backends and collects token usage across all invocations.
-
-Graph topology:
-
-    [START]
-       │
-    [route]          ← decides which provider(s) to call based on GraphState.provider
-       ├──────────────── azure
-       ├──────────────── vertex_gemini
-       ├──────────────── vertex_claude
-       └──────────────── bedrock_claude
-            │ (all converge)
-         [collect_usage]
-              │
-           [END]
-
-Each provider node calls the corresponding standalone provider module,
-so this file is purely orchestration — no LLM logic lives here.
-
-Docs:
-  LangGraph concepts              → https://langchain-ai.github.io/langgraph/concepts/
-  LangGraph how-to guides         → https://langchain-ai.github.io/langgraph/how-tos/
-  Conditional edges               → https://langchain-ai.github.io/langgraph/how-tos/branching/
-
-Usage:
-    uv run python langgraph_router/router.py
-    # or specify a provider:
-    PROVIDER=vertex_gemini uv run python langgraph_router/router.py
-    # run all providers in sequence for comparison:
-    PROVIDER=all uv run python langgraph_router/router.py
 """
 
 from __future__ import annotations
@@ -47,29 +18,21 @@ from rich.console import Console
 load_dotenv()
 console = Console()
 
-# ────────────────────────────────────────────────────────────────────────────
-# State
-# ────────────────────────────────────────────────────────────────────────────
-
-ProviderName = Literal["azure", "vertex_gemini", "vertex_claude", "bedrock_claude", "all"]
+ProviderName = Literal[
+    "azure", "vertex_gemini", "vertex_claude", "bedrock_claude", "self_hosted", "all"
+]
 
 
 def _merge_usage(existing: list, new: list) -> list:
-    """LangGraph reducer: accumulate usage records across all provider nodes."""
     return (existing or []) + (new or [])
 
 
 class GraphState(TypedDict):
-    """Shared state flowing through the LangGraph graph."""
-    prompt: str                                              # user input
-    provider: ProviderName                                   # which provider to invoke
-    usage_records: Annotated[list[dict], _merge_usage]       # accumulated token usage
-    responses: Annotated[list[dict], _merge_usage]           # accumulated responses
+    prompt: str
+    provider: ProviderName
+    usage_records: Annotated[list[dict], _merge_usage]
+    responses: Annotated[list[dict], _merge_usage]
 
-
-# ────────────────────────────────────────────────────────────────────────────
-# Provider nodes (thin wrappers calling standalone provider modules)
-# ────────────────────────────────────────────────────────────────────────────
 
 def node_azure(state: GraphState) -> dict:
     from providers.azure_openai_provider import build_client, chat_stream
@@ -130,38 +93,38 @@ def node_bedrock_claude(state: GraphState) -> dict:
     }
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# Routing logic
-# ────────────────────────────────────────────────────────────────────────────
+def node_self_hosted(state: GraphState) -> dict:
+    from providers.self_hosted_vllm_provider import build_client, chat_stream
+    client = build_client()
+    model_id = os.environ.get("SELF_HOSTED_MODEL", "qwen3-32b")
+    result = chat_stream(client, state["prompt"], model_id)
+    return {
+        "responses": [{"provider": "self_hosted", "text": result["response_text"]}],
+        "usage_records": [{
+            "provider": "Self-hosted",
+            "model": model_id,
+            **{k: result[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens")},
+        }],
+    }
 
-_ALL_PROVIDERS = ["azure", "vertex_gemini", "vertex_claude", "bedrock_claude"]
+
+_ALL_PROVIDERS = ["azure", "vertex_gemini", "vertex_claude", "bedrock_claude", "self_hosted"]
 
 
 def route(state: GraphState) -> list[str]:
-    """
-    Conditional edge function: returns the list of node names to invoke next.
-    'all' fans out to every provider in parallel (LangGraph handles concurrency).
-    """
     p = state.get("provider", "vertex_gemini")
     if p == "all":
         return _ALL_PROVIDERS
     return [p]
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# Graph assembly
-# ────────────────────────────────────────────────────────────────────────────
-
 def build_graph() -> StateGraph:
     g = StateGraph(GraphState)
-
-    # Add provider nodes
     g.add_node("azure", node_azure)
     g.add_node("vertex_gemini", node_vertex_gemini)
     g.add_node("vertex_claude", node_vertex_claude)
     g.add_node("bedrock_claude", node_bedrock_claude)
-
-    # Fan-out: START → conditional edge → one or all provider nodes
+    g.add_node("self_hosted", node_self_hosted)
     g.add_conditional_edges(
         START,
         route,
@@ -170,20 +133,13 @@ def build_graph() -> StateGraph:
             "vertex_gemini": "vertex_gemini",
             "vertex_claude": "vertex_claude",
             "bedrock_claude": "bedrock_claude",
+            "self_hosted": "self_hosted",
         },
     )
-
-    # All provider nodes converge at END
-    # (usage_records and responses are merged via the Annotated reducer)
     for node in _ALL_PROVIDERS:
         g.add_edge(node, END)
-
     return g
 
-
-# ────────────────────────────────────────────────────────────────────────────
-# Entrypoint
-# ────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     from token_dashboard.dashboard import print_dashboard

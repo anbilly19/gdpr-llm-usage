@@ -22,6 +22,7 @@
 - [Unified Token Dashboard](#unified-token-dashboard)
 - [Running Tests](#running-tests)
 - [Related Projects](#related-projects)
+- [Free & Trial API Access](./FREE_TRIALS.md)
 - [Key Documentation Links](#key-documentation-links)
 
 ---

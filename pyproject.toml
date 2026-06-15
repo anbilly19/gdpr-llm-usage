@@ -8,18 +8,15 @@ dependencies = [
     # Azure OpenAI
     "openai>=1.82.0",
     "azure-identity>=1.22.0",
-    # Google Vertex AI (Gemini + Claude)
+    # Google Vertex AI (Gemini) — new google-genai SDK (replaces vertexai.generative_models)
+    "google-genai>=1.16.0",
     "google-cloud-aiplatform>=1.96.0",
-    "anthropic[vertex]>=0.52.0",
+    # Anthropic (Vertex + Bedrock transports)
+    "anthropic[vertex,bedrock]>=0.52.0",
     # AWS Bedrock
     "boto3>=1.38.0",
-    "anthropic[bedrock]>=0.52.0",
-    # LangGraph / LangChain
-    "langgraph>=0.4.8",
-    "langchain-openai>=0.3.18",
-    "langchain-google-vertexai>=2.0.14",
-    "langchain-aws>=0.2.25",
-    "langchain-anthropic>=0.3.15",
+    # LangGraph orchestration
+    "langgraph>=1.2.5",
     # Shared utilities
     "python-dotenv>=1.1.0",
     "rich>=14.0.0",

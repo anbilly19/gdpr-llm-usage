@@ -21,6 +21,7 @@
 - [Reusable Harness](#reusable-harness)
 - [Unified Token Dashboard](#unified-token-dashboard)
 - [Running Tests](#running-tests)
+- [Related Projects](#related-projects)
 - [Key Documentation Links](#key-documentation-links)
 
 ---
@@ -340,6 +341,45 @@ uv run pytest -v
 
 # Single test file
 uv run pytest tests/test_providers.py -v
+```
+
+---
+
+## Related Projects
+
+This section maps the broader ecosystem to help you understand where `gdpr-llm-usage` fits and what to reach for when you need something different.
+
+### LLM abstraction & unified gateways
+
+| Project | Description | How it differs from this repo |
+|---------|-------------|-------------------------------|
+| [**LiteLLM**](https://github.com/BerriAI/litellm) ⭐ 20k+ | Open-source Python SDK + proxy server. Single OpenAI-compatible API over 100+ providers (Azure, Vertex, Bedrock, Anthropic, etc.). Includes cost tracking, rate limiting, caching. | Broader (100+ providers, full proxy infra). Not opinionated on EU routing or Azure-as-home. Best if you need production gateway scale. |
+| [**EdgeQuake LLM**](https://github.com/raphaelmansuy/edgequake-llm) | Rust crate providing strongly-typed trait-based abstraction over 17 providers (cloud APIs, local inference, gateways). Includes token counting, rate limiting, response caching. | Rust-native, performance-focused, no EU/GDPR angle. Good reference for a typed provider abstraction in systems work. |
+| [**ArchGW**](https://github.com/katanemo/archgw) | Lightweight AI API gateway / proxy. Plans for Azure OpenAI, Bedrock, Anthropic, Cohere support. | Infrastructure-heavy (proxy layer), not a Python library. |
+
+### Multi-provider routing samples
+
+| Project | Description | How it differs |
+|---------|-------------|----------------|
+| [**AWS Guidance for Multi-Provider GenAI Gateway**](https://github.com/aws-solutions-library-samples/guidance-for-multi-provider-generative-ai-gateway-on-aws) ⭐ 226 | Official AWS Solutions Library sample. Unified OpenAI-compatible endpoint routing to Bedrock, OpenAI, Azure OpenAI via API Gateway + Lambda. Infra-as-code (HCL/Terraform). | AWS-centric infra view (not Azure-as-home). No EU/GDPR data-residency angle. Terraform/HCL rather than Python. |
+| [**aws-samples/sample-agent-interoperability**](https://github.com/aws-samples/sample-agent-interoperability) | Multi-cloud agent interoperability: Google ADK + Bedrock AgentCore exposed via A2A protocol. | Agent-level interop focus, not LLM-routing or token tracking. |
+
+### Real-world GDPR-compliant multi-cloud LLM architecture
+
+| Project / Resource | Description |
+|--------------------|-------------|
+| [**CompanyGPT (innFactory)**](https://innfactory.de/en/references/companygpt/) | Enterprise GDPR-compliant AI assistant built on Azure + Vertex AI + Bedrock. Routes: Claude → Bedrock EU Frankfurt, GPT → Azure OpenAI EU Sweden/Germany, Gemini → Vertex EU europe-west3. Closest real-world architecture to this repo. Described as a product/reference, not open-source code. |
+| [**Anthropic Claude EU data residency issue (claude-code #40530)**](https://github.com/anthropics/claude-code/issues/40530) | Active Anthropic GitHub issue tracking the request for EU data residency support via hyperscaler backends (exactly the problem this repo solves). Useful to watch for upstream progress. |
+| [**Azure AI Foundry Claude EU timeline (MS Q&A)**](https://learn.microsoft.com/en-us/answers/questions/5867930/timeline-for-claude-in-microsoft-foundry-to-run-on) | Microsoft community thread tracking when Azure-native Claude EU hosting will arrive. Once resolved, the `azure` provider in this repo can be extended to use Claude directly via Foundry. |
+
+### When to use what
+
+```
+Need production-grade proxy with 100+ providers?  → LiteLLM
+Need Rust-native strongly-typed provider traits?   → EdgeQuake LLM
+Need AWS-anchored multi-provider routing (IaC)?   → AWS Multi-Provider Gateway guidance
+Need EU/GDPR-pinned routing with Azure as home,
+  LangGraph orchestration, and Python harness?    → this repo ✓
 ```
 
 ---

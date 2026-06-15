@@ -158,7 +158,7 @@ print(result.usage)  # {prompt_tokens, completion_tokens, total_tokens}
 gdpr-llm-usage/
 ├── providers/                        # Standalone provider scripts (one per LLM backend)
 │   ├── azure_openai_provider.py      # HOME: Azure OpenAI GPT-4o, EU Data Boundary
-│   ├── vertex_gemini_provider.py     # AWAY: Vertex AI Gemini, EU multi-region
+│   ├── vertex_gemini_provider.py     # AWAY: Vertex AI Gemini, EU multi-region (google-genai SDK)
 │   ├── vertex_claude_provider.py     # AWAY: Vertex AI Claude, EU multi-region
 │   └── bedrock_claude_provider.py    # AWAY: AWS Bedrock Claude, EU regions
 ├── langgraph_router/
@@ -199,6 +199,8 @@ Docs: [Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/
 
 ### 2. Google Vertex AI — Gemini (AWAY)
 
+Uses the **new `google-genai` SDK** (`pip install google-genai`). The old `vertexai.generative_models` path is deprecated as of mid-2026.
+
 ```bash
 # In .env:
 GOOGLE_CLOUD_PROJECT=your-gcp-project
@@ -217,7 +219,7 @@ gcloud auth application-default login
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json
 ```
 
-Docs: [Vertex AI overview](https://cloud.google.com/vertex-ai/docs/start/introduction-unified-platform) · [Gemini on Vertex](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/overview) · [EU locations](https://cloud.google.com/vertex-ai/docs/general/locations#europe) · [google-cloud-aiplatform SDK](https://github.com/googleapis/python-aiplatform)
+Docs: [Vertex AI overview](https://cloud.google.com/vertex-ai/docs/start/introduction-unified-platform) · [Gemini on Vertex](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/overview) · [EU locations](https://cloud.google.com/vertex-ai/docs/general/locations#europe) · [google-genai SDK](https://googleapis.github.io/python-genai/)
 
 ---
 
@@ -405,5 +407,5 @@ Need EU/GDPR-pinned routing with Azure as home,
 | uv documentation | https://docs.astral.sh/uv/ |
 | openai-python SDK | https://github.com/openai/openai-python |
 | anthropic-sdk-python | https://github.com/anthropics/anthropic-sdk-python |
-| google-cloud-aiplatform SDK | https://github.com/googleapis/python-aiplatform |
+| google-genai SDK | https://googleapis.github.io/python-genai/ |
 | boto3 Bedrock runtime | https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime.html |

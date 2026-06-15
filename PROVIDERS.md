@@ -97,6 +97,12 @@ VERTEX_GEMINI_MODEL=gemini-2.5-flash-001
 | `gemini-1.5-pro-002` | Multimodal | ✅ GA | Stable, widely used |
 | `text-embedding-005` | Embedding | ✅ | Vertex embeddings |
 
+### SDK note
+
+This project uses the **new `google-genai` SDK** (`pip install google-genai`) rather than the older
+`vertexai.generative_models` path from `google-cloud-aiplatform`. The old path is deprecated as of mid-2026.
+See the [migration guide](https://googleapis.github.io/python-genai/) for details.
+
 ### Authentication
 
 ```bash
@@ -116,7 +122,7 @@ gcloud auth application-default login
 - [Generative AI on Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/overview)
 - [EU locations](https://cloud.google.com/vertex-ai/docs/general/locations#europe)
 - [Gemini model versioning](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versioning)
-- [google-cloud-aiplatform SDK](https://github.com/googleapis/python-aiplatform)
+- [google-genai SDK](https://googleapis.github.io/python-genai/)
 - [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 
 ---
@@ -254,5 +260,6 @@ export AWS_PROFILE=your-profile
 | Auth mechanism | API key / Azure AD | Service account / ADC | Service account / ADC | IAM / Access keys |
 | Streaming | ✅ (`stream=True`) | ✅ (`stream=True`) | ✅ (`messages.stream()`) | ✅ (`messages.stream()`) |
 | Token usage in stream | ✅ (`stream_options`) | ✅ (`usage_metadata`) | ✅ (final message) | ✅ (final message) |
+| SDK | `openai` | `google-genai` | `anthropic[vertex]` | `anthropic[bedrock]` |
 | Home/Away | HOME | AWAY | AWAY | AWAY |
 | Extra cloud dependency | None | GCP project | GCP project | AWS account |

@@ -1,0 +1,42 @@
+[project]
+name = "gdpr-llm-usage"
+version = "0.1.0"
+description = "EU-compliant LLM provider research: Azure OpenAI, Vertex Gemini, Vertex Claude, AWS Bedrock"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Azure OpenAI
+    "openai>=1.82.0",
+    "azure-identity>=1.22.0",
+    # Google Vertex AI (Gemini + Claude)
+    "google-cloud-aiplatform>=1.96.0",
+    "anthropic[vertex]>=0.52.0",
+    # AWS Bedrock
+    "boto3>=1.38.0",
+    "anthropic[bedrock]>=0.52.0",
+    # LangGraph / LangChain
+    "langgraph>=0.4.8",
+    "langchain-openai>=0.3.18",
+    "langchain-google-vertexai>=2.0.14",
+    "langchain-aws>=0.2.25",
+    "langchain-anthropic>=0.3.15",
+    # Shared utilities
+    "python-dotenv>=1.1.0",
+    "rich>=14.0.0",
+    "tiktoken>=0.9.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.11.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

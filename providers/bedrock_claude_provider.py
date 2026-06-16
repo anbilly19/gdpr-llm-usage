@@ -8,12 +8,18 @@ EU regions with Anthropic Claude support:
   eu-central-1 Frankfurt (Germany)  ← recommended for German data residency
   eu-north-1   Stockholm (Sweden)
 
+Credential resolution order (standard boto3 chain):
+  1. Explicit env vars  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  2. ~/.aws/credentials profile
+  3. IAM instance profile / ECS task role / EKS IRSA  (recommended for production)
+  4. AWS SSO / Identity Center  (aws sso login --profile <name>)
+
 Docs:
   AWS Bedrock overview            → https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html
   Anthropic Claude on Bedrock     → https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic.html
   Supported model IDs             → https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html
   Enable model access             → https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html
-  boto3 Bedrock runtime           → https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-runtime.html
+  boto3 sessions                  → https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html
   anthropic[bedrock] SDK          → https://github.com/anthropics/anthropic-sdk-python#aws-bedrock
 
 Prerequisite:
@@ -38,13 +44,23 @@ console = Console()
 
 def build_client() -> AnthropicBedrock:
     """
-    Return an AnthropicBedrock client.
-    Uses explicit AWS credentials from .env; for production prefer IAM roles / instance profiles.
+    Return an AnthropicBedrock client backed by a boto3 session.
+
+    A boto3 Session resolves credentials through the full AWS credential chain
+    (env vars → ~/.aws/credentials → IAM role → ECS task role → IRSA → SSO),
+    so this works identically in local dev, CI, and production without code changes.
+    Resolved credentials are forwarded to AnthropicBedrock via botocore.
     """
+    region = os.environ.get("AWS_REGION", "eu-central-1")
+
+    session = boto3.Session(region_name=region)
+    credentials = session.get_credentials().get_frozen_credentials()
+
     return AnthropicBedrock(
-        aws_access_key=os.environ["AWS_ACCESS_KEY_ID"],
-        aws_secret_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-        aws_region=os.environ.get("AWS_REGION", "eu-central-1"),
+        aws_access_key=credentials.access_key,
+        aws_secret_key=credentials.secret_key,
+        aws_session_token=credentials.token,   # populated for temporary creds (roles, SSO)
+        aws_region=region,
     )
 
 

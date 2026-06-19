@@ -1,91 +1,110 @@
-# Startup Cloud Cost Snapshot
+# Cloud Cost Reference — Customer Operating Costs
 
-A rough cost reference for an early-stage AI startup choosing between
-Google Cloud Vertex AI, AWS Bedrock, and Azure for LLM workloads.
+This platform is deployed per customer. Cloud infrastructure and AI API costs
+are **billed directly to each customer** as operating expenses — not absorbed
+by the platform provider. This document helps customers and implementation
+teams understand what to expect and how to keep costs lean.
 
 ---
 
-## Why Google Cloud Often Wins Early
+## Billing Model
 
-| Platform | Max Startup Credits | Notes |
+| Layer | Who pays | What it covers |
 |---|---|---|
-| **Google Cloud — AI Tier** | **$350,000** | AI-first startups, spread over 2 years ($250k yr1 + $100k yr2) |
-| **Google Cloud — Standard** | $200,000 | Any early-stage startup |
-| **AWS Activate — Portfolio** | $200,000 | Requires an Activate Provider (VC / accelerator) Org ID |
-| **AWS Activate — Founders** | $5,000 | Self-funded / bootstrapped |
-| **Microsoft for Startups** | $150,000 | Staged unlock, Series A+ for full amount |
+| Cloud infrastructure (compute, storage, networking) | Customer | GCP / AWS / Azure resources provisioned in their account |
+| LLM API tokens | Customer | Per-token charges for Claude, Gemini, GPT-4o |
+| Platform setup & integration | Engagement fee | One-time or retainer; scoped separately |
 
-Credits cover all platform usage (compute, storage, APIs) — not just LLM tokens.
+Each customer runs the platform in **their own cloud account** — no shared
+tenancy, no pooled API keys.
 
 ---
 
-## Claude Sonnet Pricing Baseline
+## LLM Token Pricing Baseline
 
-Token pricing is identical across providers:
+Token pricing is identical across providers for Claude Sonnet:
 
 | Metric | Price |
 |---|---|
 | Input tokens | $3.00 / M tokens |
 | Output tokens | $15.00 / M tokens |
 
-> Pricing is the same on Vertex AI (Google Cloud), Bedrock (AWS), and the
-> direct Anthropic API. The cost advantage comes entirely from credits and
-> discount programs.
+> The same model costs the same on Vertex AI (Google Cloud), AWS Bedrock, and
+> the direct Anthropic API. Provider choice affects EU data residency and
+> infrastructure alignment — not per-token cost.
 
-### Rough monthly spend (60% input / 40% output split)
+### Rough monthly token spend (60% input / 40% output split)
 
 | Usage tier | Tokens / month | Monthly cost |
 |---|---|---|
-| Early MVP | 50M | ~$390 |
-| Growth | 500M | ~$3,900 |
-| Scale | 2B | ~$15,600 |
+| Light usage | 50M | ~$390 |
+| Active platform | 500M | ~$3,900 |
+| Heavy / multi-tenant | 2B | ~$15,600 |
+
+Actual spend scales with document volume, agent call frequency, and context
+window usage per workflow.
 
 ---
 
-## Cost Levers: Batch API + Prompt Caching
+## Cost Levers for Customers
 
-Both Vertex AI and Bedrock support these:
+These require no model changes — only API call adjustments in the platform:
 
-- **Batch API** — ~50% off output tokens for async workloads
-- **Prompt caching** — ~90% off repeated input tokens (system prompts, document context)
-- **Combined effect** — can reduce effective monthly spend by ~60%+ at Growth scale
-
-These require zero model changes — just API call adjustments.
-
----
-
-## EU Routing Consideration
-
-- **Google Cloud Vertex AI** — `location='eu'` multi-region endpoint keeps
-  all processing inside the EU. Claude + Gemini both available.
-- **AWS Bedrock** — EU regions available (Frankfurt `eu-central-1`,
-  Dublin `eu-west-1`, Stockholm `eu-north-1`). Claude models available
-  after enabling model access per region.
-- **Azure AI Foundry** — Claude on Azure today runs on Anthropic-hosted
-  infrastructure regardless of Azure region. True EU-pinned Claude on
-  Azure is roadmap (2026). Not recommended for strict EU data residency.
+- **Prompt caching** — ~90% off repeated input tokens (system prompts, shared
+  document context reused across agent steps). Highest impact for RAG and
+  agentic document workflows.
+- **Batch API** — ~50% off output tokens for non-real-time workloads (bulk
+  document processing, overnight ingestion jobs).
+- **Combined effect** — can reduce effective monthly token spend by ~60%+ for
+  typical document-heavy pipelines.
 
 ---
 
-## Rough Recommendation
+## Provider Recommendation by Customer Cloud Preference
 
-- **Google Cloud Vertex AI** — best choice if minimising burn is the priority.
-  Highest startup credits ($350k), Gemini + Claude available, solid EU routing.
-- **AWS Bedrock** — strong if team already operates on AWS and can fully
-  use Activate credits. Good EU region coverage for Claude.
-- **Azure** — consider only if Microsoft ecosystem alignment is a hard
-  requirement. Lower credit ceiling, Claude EU routing still limited.
+| Customer's existing cloud | Recommended LLM provider | Notes |
+|---|---|---|
+| Google Cloud | **Vertex AI** (Gemini + Claude) | Native auth, `location='eu'` for EU residency, no cross-cloud egress |
+| AWS | **AWS Bedrock** (Claude) | IAM-native, EU regions: `eu-central-1` Frankfurt, `eu-west-1` Dublin |
+| Azure | **Vertex AI or Bedrock** (AWAY) | Azure Foundry Claude is not EU-resident today; cross-cloud call required |
+| No preference | **Google Cloud Vertex AI** | Best EU routing flexibility, Gemini + Claude in one platform |
+
+---
+
+## EU Data Residency
+
+All LLM calls must stay within the EU. Supported paths:
+
+- **Google Cloud Vertex AI** — set `location='eu'` (multi-region) or
+  `europe-west4` (Netherlands, strictest single-region).
+- **AWS Bedrock** — use `eu-central-1` (Frankfurt) or `eu-west-1` (Dublin).
+  Model access must be enabled per region in the AWS Console.
+- **Azure AI Foundry + Claude** — not EU-resident today; Claude runs on
+  Anthropic infrastructure regardless of Azure region. Azure OpenAI (GPT-4o)
+  is EU-compliant and can be used as the Azure-native alternative.
+
+---
+
+## Startup Credits (for customers who qualify)
+
+If a customer is an early-stage company, they may apply for cloud startup
+credits to offset initial operating costs:
+
+| Program | Max credits | Link |
+|---|---|---|
+| Google Cloud — AI Tier | $350,000 | https://cloud.google.com/startup/ai |
+| AWS Activate — Portfolio | $200,000 | https://aws.amazon.com/startups/credits/ |
+| Microsoft for Startups | $150,000 | https://www.microsoft.com/en-us/startups |
+
+Credits cover all platform usage in the customer's account, not just LLM tokens.
 
 ---
 
 ## References
 
-- Google Cloud for Startups AI Program — https://cloud.google.com/startup/ai
-- Google for Startups Cloud Program — https://cloud.google.com/startup
-- Google Cloud Startup Benefits & Eligibility — https://cloud.google.com/startup/benefits
-- AWS Activate Credits — https://aws.amazon.com/startups/credits/
-- Microsoft for Startups — https://www.microsoft.com/en-us/startups
-- Microsoft for Startups Benefits — https://learn.microsoft.com/en-us/microsoft-for-startups/benefits
-- Claude Sonnet 4.6 pricing on Vertex AI — https://futureagi.com/llm-cost-calculator/vertex-ai/claude-sonnet-4-6/
-- Claude Sonnet 4.6 pricing on Bedrock — https://futureagi.com/llm-cost-calculator/bedrock/us-anthropic-claude-sonnet-4-6/
+- Claude Sonnet pricing on Vertex AI — https://futureagi.com/llm-cost-calculator/vertex-ai/claude-sonnet-4-6/
+- Claude Sonnet pricing on Bedrock — https://futureagi.com/llm-cost-calculator/bedrock/us-anthropic-claude-sonnet-4-6/
 - Anthropic Batch API & prompt caching — https://platform.claude.com/docs/en/about-claude/pricing
+- Vertex AI EU locations — https://cloud.google.com/vertex-ai/docs/general/locations#europe
+- AWS Bedrock model access — https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html
+- Azure EU Data Boundary — https://learn.microsoft.com/en-us/privacy/eudb/eu-data-boundary-learn
